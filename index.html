@@ -197,8 +197,13 @@
 <script>
 (function(){
   'use strict';
-  var KEY='banapis';
+  var KEYHASH='c95becc93e202889e6e8ac8735ba2ef0fa11a8fdd70f537cbb56b2dff18c1a16';
   var LS='tr7.open';
+  function sha256hex(str){
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)).then(function(buf){
+      return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0')}).join('');
+    });
+  }
   var log=document.getElementById('log');
   var promptRow=document.getElementById('promptRow');
   var input=document.getElementById('word');
@@ -301,11 +306,13 @@
     if(!v)return;
     print('> '+input.value.toUpperCase());
     input.value='';
-    if(v===KEY){open();return}
-    tries++;
-    var msg=tries<=noes.length?noes[tries-1]:'ASK YOUR TABLE.';
-    print(msg, tries>noes.length?'dim':'bad');
-    term.classList.remove('jolt');void term.offsetWidth;term.classList.add('jolt');
+    sha256hex(v).then(function(h){
+      if(h===KEYHASH){open();return}
+      tries++;
+      var msg=tries<=noes.length?noes[tries-1]:'ASK YOUR TABLE.';
+      print(msg, tries>noes.length?'dim':'bad');
+      term.classList.remove('jolt');void term.offsetWidth;term.classList.add('jolt');
+    });
   });
 
   function open(){
