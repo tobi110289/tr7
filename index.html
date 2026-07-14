@@ -309,7 +309,7 @@
     sha256hex(v).then(function(h){
       if(h===KEYHASH){open();return}
       tries++;
-      var msg=tries<=noes.length?noes[tries-1]:'ASK YOUR TABLE.';
+      var msg=tries<=noes.length?noes[tries-1]:'THERE IS A WORLD WHERE NO ONE KEEPS\nA BIRTHDAY TO THEMSELVES.';
       print(msg, tries>noes.length?'dim':'bad');
       term.classList.remove('jolt');void term.offsetWidth;term.classList.add('jolt');
     });
