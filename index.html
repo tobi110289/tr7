@@ -147,6 +147,13 @@
     display:flex;align-items:center;justify-content:center;
   }
   #playBtn:active{transform:scale(.98)}
+  /* ------- hub menu ------- */
+  .menuline{
+    display:block;cursor:pointer;margin-top:.55em;
+    color:var(--phos);
+  }
+  .menuline .dimc{color:var(--phos-dim)}
+  .menuline:active{opacity:.7}
   /* ------- the file ------- */
   #fileBtn{
     display:none;background:none;border:0;cursor:pointer;
@@ -407,9 +414,12 @@
     if(r.ok){entriesAvailable=true;maybeShowFileBtn();}
   }).catch(function(){});
   function maybeShowFileBtn(){
-    if(entriesAvailable&&unlocked)fileBtn.classList.add('on');
+    if(entriesAvailable&&unlocked){
+      fileBtn.classList.add('on');
+      if(hubFileLine)hubFileLine.style.display='';
+    }
   }
-  fileBtn.addEventListener('click',function(){
+  function requestFile(){
     var k=null;try{k=localStorage.getItem('tr7.k')}catch(e){}
     if(k){openFile();return}
     target='file';
@@ -418,7 +428,21 @@
     print(' ');
     print('THE LEDGER ASKS AGAIN. (PROTOCOL.)','dim');
     promptRow.classList.add('on');input.focus();
-  });
+  }
+  fileBtn.addEventListener('click',requestFile);
+  var hubFileLine=null;
+  function showHub(){
+    term.style.display='';
+    var mk=function(label,fn){
+      var s=document.createElement('div');s.className='menuline';
+      var c=document.createElement('span');c.className='dimc';c.textContent='> ';
+      s.appendChild(c);s.appendChild(document.createTextNode(label));
+      s.addEventListener('click',fn);log.appendChild(s);return s;
+    };
+    hubFileLine=mk('THE FILE',requestFile);
+    if(!entriesAvailable)hubFileLine.style.display='none';
+    mk('THE TAPE',function(){showTheatre()});
+  }
   document.getElementById('fileBack').addEventListener('click',function(){location.reload()});
   function openFile(){
     term.style.display='none';card.classList.remove('on');theatre.classList.remove('on');
@@ -455,7 +479,7 @@
   setTimeout(function(){
     if(unlocked){
       type(bootBack,function(){
-        setTimeout(showTheatre,500);
+        setTimeout(showHub,400);
       });
     }else{
       type(bootFresh,gate);
