@@ -147,6 +147,22 @@
     display:flex;align-items:center;justify-content:center;
   }
   #playBtn:active{transform:scale(.98)}
+  /* ------- the file ------- */
+  #fileBtn{
+    display:none;background:none;border:0;cursor:pointer;
+    font:inherit;color:var(--phos-dim);
+    font-size:clamp(18px,4.5vw,24px);
+    text-shadow:0 0 6px rgba(255,180,84,.35);
+    padding:0;
+  }
+  #fileBtn.on{display:inline}
+  #fileView{display:none;flex:1;flex-direction:column;overflow-y:auto;gap:26px;padding:14px 2px}
+  #fileView.on{display:flex}
+  .entry{max-width:36ch;width:100%;margin:0 auto}
+  .entry .elabel{color:var(--phos-dim);font-size:clamp(17px,4.2vw,22px);margin-bottom:6px}
+  .entry img{width:100%;border:1px solid var(--phos-faint);border-radius:6px;display:block;margin-bottom:8px;filter:sepia(.25) saturate(.8) contrast(1.02)}
+  .entry .etext{font-size:clamp(19px,4.8vw,25px);line-height:1.4}
+  #fileBack{color:var(--phos-dim);background:none;border:0;cursor:pointer;font:inherit;font-size:clamp(18px,4.5vw,24px);text-align:left;padding:0;max-width:36ch;margin:0 auto;width:100%}
   /* ------- closing card ------- */
   #card{display:none;flex:1;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:1.1em;padding:0 8px}
   #card.on{display:flex}
@@ -189,7 +205,12 @@
     <div class="small">(the door knows you now.)</div>
   </div>
 
-  <div class="osd" style="justify-content:flex-end"><span id="osdTape">TR-7</span></div>
+  <div id="fileView">
+    <button id="fileBack">&lt; BACK</button>
+    <div id="entries"></div>
+  </div>
+
+  <div class="osd" style="justify-content:space-between"><button id="fileBtn">:: THE FILE</button><span id="osdTape">TR-7</span></div>
 </div>
 <div class="rollbar"></div>
 <div id="flick"></div>
@@ -203,6 +224,21 @@
     return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)).then(function(buf){
       return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0')}).join('');
     });
+  }
+  function deriveKey(word){
+    var enc=new TextEncoder();
+    return crypto.subtle.importKey('raw',enc.encode(word),'PBKDF2',false,['deriveKey']).then(function(km){
+      return crypto.subtle.deriveKey({name:'PBKDF2',salt:enc.encode('tr7-file-v1'),iterations:150000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},true,['decrypt']);
+    });
+  }
+  function keyToHex(key){return crypto.subtle.exportKey('raw',key).then(function(b){return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0')}).join('')})}
+  function hexToKey(hex){
+    var bytes=new Uint8Array(hex.match(/.{2}/g).map(function(h){return parseInt(h,16)}));
+    return crypto.subtle.importKey('raw',bytes,{name:'AES-GCM'},false,['decrypt']);
+  }
+  function gcmDecrypt(key,buf){
+    var u=new Uint8Array(buf);
+    return crypto.subtle.decrypt({name:'AES-GCM',iv:u.slice(0,12)},key,u.slice(12));
   }
   var log=document.getElementById('log');
   var promptRow=document.getElementById('promptRow');
@@ -307,7 +343,7 @@
     print('> '+input.value.toUpperCase());
     input.value='';
     sha256hex(v).then(function(h){
-      if(h===KEYHASH){open();return}
+      if(h===KEYHASH){open(v);return}
       tries++;
       var msg=tries<=noes.length?noes[tries-1]:'THERE IS A WORLD WHERE NO ONE KEEPS\nA BIRTHDAY TO THEMSELVES.';
       print(msg, tries>noes.length?'dim':'bad');
@@ -315,11 +351,18 @@
     });
   });
 
-  function open(){
+  function open(word){
     try{localStorage.setItem(LS,'1')}catch(e){}
+    unlocked=true;
+    deriveKey(word).then(keyToHex).then(function(hex){
+      try{localStorage.setItem('tr7.k',hex)}catch(e){}
+      if(target==='file'){print(':: PROTOCOL ACCEPTED','dim');setTimeout(openFile,600);}
+    }).catch(function(){});
     promptRow.classList.remove('on');
     input.blur();
     print(' ');
+    maybeShowFileBtn();
+    if(target==='file')return;
     print(':: DOOR OPEN','dim');
     tube.classList.add('burst');
     setTimeout(showTheatre,750);
@@ -352,6 +395,60 @@
     }
     card.classList.add('on');
     if(window.__hissGain)window.__hissGain.gain.value=.012;
+  }
+
+  /* ---- the file ---- */
+  var fileBtn=document.getElementById('fileBtn');
+  var fileView=document.getElementById('fileView');
+  var entriesEl=document.getElementById('entries');
+  var target='tape';
+  var entriesAvailable=false;
+  fetch('entries.json.enc',{method:'HEAD'}).then(function(r){
+    if(r.ok){entriesAvailable=true;maybeShowFileBtn();}
+  }).catch(function(){});
+  function maybeShowFileBtn(){
+    if(entriesAvailable&&unlocked)fileBtn.classList.add('on');
+  }
+  fileBtn.addEventListener('click',function(){
+    var k=null;try{k=localStorage.getItem('tr7.k')}catch(e){}
+    if(k){openFile();return}
+    target='file';
+    card.classList.remove('on');theatre.classList.remove('on');
+    term.style.display='';
+    print(' ');
+    print('THE LEDGER ASKS AGAIN. (PROTOCOL.)','dim');
+    promptRow.classList.add('on');input.focus();
+  });
+  document.getElementById('fileBack').addEventListener('click',function(){location.reload()});
+  function openFile(){
+    term.style.display='none';card.classList.remove('on');theatre.classList.remove('on');
+    fileView.classList.add('on');
+    osdMode.textContent='▤ FILE';
+    var khex=null;try{khex=localStorage.getItem('tr7.k')}catch(e){}
+    if(!khex)return;
+    hexToKey(khex).then(function(key){
+      return fetch('entries.json.enc').then(function(r){return r.arrayBuffer()})
+        .then(function(buf){return gcmDecrypt(key,buf)})
+        .then(function(pt){return JSON.parse(new TextDecoder().decode(pt))})
+        .then(function(list){
+          entriesEl.innerHTML='';
+          list.forEach(function(en){
+            var d=document.createElement('div');d.className='entry';
+            var l=document.createElement('div');l.className='elabel';l.textContent=en.label||'';d.appendChild(l);
+            if(en.img){
+              var im=document.createElement('img');
+              fetch(en.img).then(function(r){return r.arrayBuffer()}).then(function(b){return gcmDecrypt(key,b)}).then(function(pb){
+                im.src=URL.createObjectURL(new Blob([pb],{type:'image/jpeg'}));
+              }).catch(function(){im.remove()});
+              d.appendChild(im);
+            }
+            var t=document.createElement('div');t.className='etext';t.textContent=en.text||'';d.appendChild(t);
+            entriesEl.appendChild(d);
+          });
+        });
+    }).catch(function(){
+      entriesEl.textContent='THE FILE WILL NOT OPEN TODAY.';
+    });
   }
 
   /* ---- start ---- */
